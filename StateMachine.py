@@ -7,13 +7,42 @@ import BaseShape
 import json
 import History
 import Config
+class Example(QWidget):
+
+    def __init__(self):
+        super(Example, self).__init__()
+        self.initUI()
+
+    def initUI(self):
+        title = QLabel('Tile')
+        author = QLabel('Author')
+        review = QLabel('Review')
+        
+        titleEdit = QLineEdit()
+        authorEdit = QLineEdit()
+        reviewEdit = QTextEdit()
+
+        grid = QGridLayout()
+        grid.setSpacing(10)
+        grid.addWidget(title, 1, 0)
+        grid.addWidget(titleEdit, 1, 1)
+        self.setLayout(grid)
 
 
 class MainWindow(QMainWindow):
     def __init__(self):
-        QMainWindow.__init__(self, windowTitle=u"状态机编辑器")
+        QMainWindow.__init__(self, windowTitle=u"配置表编辑器")
         self.m_PaintWidget = PaintWidget.PaintWidget()
-        self.m_PaintWidget.Update()
+
+        #申请一个新的QWidget修改来添加grid布局器
+        mainQWidget = QWidget()
+        self.setCentralWidget(mainQWidget)
+        #布局器
+        grid = QGridLayout()
+        grid.setSpacing(2)
+        mainQWidget.setLayout(grid)
+
+        #self.m_PaintWidget.Update()
         #菜单栏
         FileMemu = self.menuBar().addMenu(u"菜单")
         SaveAction = QAction(u"保存", FileMemu)
@@ -23,49 +52,34 @@ class MainWindow(QMainWindow):
         FileMemu.addAction(SaveAction)
         FileMemu.addAction(ReadAction)
 
-        #工具栏
-        EditorToolBar = QToolBar()
-
-        #画线
-        self.addToolBar(Qt.TopToolBarArea,EditorToolBar)
-        self.m_DrawLineAction = QAction("Line", EditorToolBar)
-        self.m_DrawLineAction.triggered.connect(self.DrawLineActionTriggered)
-        self.m_DrawLineAction.setText(u'线')
-        self.m_DrawLineAction.setCheckable(True)
-        EditorToolBar.addAction(self.m_DrawLineAction)
-
-        #画矩形
-        self.m_DrawRectAction = QAction("Rect", EditorToolBar)
-        self.m_DrawRectAction.triggered.connect(self.DrawRectActionTriggered)
-        self.m_DrawRectAction.setText(u'矩形')
-        self.m_DrawRectAction.setCheckable(True)
-        EditorToolBar.addAction(self.m_DrawRectAction)
-
         #画布
+        #TODO 画布大小自动调整
         self.m_PaintWidget.setMinimumSize(2000, 2000)
         Scroll = QScrollArea()
         Scroll.setWidget(self.m_PaintWidget)
         Scroll.setAutoFillBackground(True)
         Scroll.setWidgetResizable(True)
-        self.setCentralWidget(Scroll)
+        grid.addWidget(Scroll, 0, 1)
+        
+        example = Example()
+        grid.addWidget(example, 0, 0)
+        self.setCentralWidget(mainQWidget)
 
-    def DrawLineActionTriggered(self):
-        """
-            @切换到画线模式
-        """
-        self.m_DrawRectAction.setChecked(False)
-        self.m_DrawDiamondAction.setChecked(False)
-        self.m_PaintWidget.SetCurrentShape(BaseShape.BaseShape.s_Line, self.m_DrawLineAction)
+        #设置布局器比例
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 5)
 
-    def DrawRectActionTriggered(self):
-        """
-            @切换到画矩形模式
-        """
-        self.m_DrawLineAction.setChecked(False)
-        self.m_DrawDiamondAction.setChecked(False)
-        self.m_PaintWidget.SetCurrentShape(BaseShape.BaseShape.s_Rect, self.m_DrawRectAction)
+        #添加工具栏,提供属性编辑
+        editorTooBar = QToolBar()
+        self.addToolBar(Qt.TopToolBarArea, editorTooBar)
+
+        #TODO
+        self.Read()
 
     def Save(self):
+        """
+            @保存配置表
+        """
         fileDialog = QFileDialog(self)
         fileDialog.setWindowTitle(u'保存状态图')
         fileDialog.setDirectory('.')
@@ -107,30 +121,8 @@ class MainWindow(QMainWindow):
             #插入配置表解析模块
             cfgObj = Config.Config(sPath)
             cfgObj.Read()
-            jsonFile = {}
-            with open(sPath, 'r') as outfile:
-                jsonFile = json.load(outfile)
-                print jsonFile
-                self.m_PaintWidget.m_lShape = []
-                for (key,value) in  jsonFile.items():
-                    if key == "s_curId":
-                        continue
-                    if value['m_bLine'][0] == True:
-                        shape = BaseShape.Line()
-                    elif value['m_bRect'][0] == True:
-                        shape = BaseShape.Rect()
-
-                    shape.InitFromJson(key, value)
-
-                    if shape.m_color == True:
-                        self.m_PaintWidget.m_chooseShape = shape
-                    self.m_PaintWidget.m_lShape.append(shape)
-
-                BaseShape.BaseShape.s_curId = jsonFile['s_curId']
-                self.BuildNet()
-                self.m_PaintWidget.m_lShape.sort(lambda x,y:cmp(x.m_bLine, y.m_bLine))
-                self.m_PaintWidget.update()
-                History.Push(self.m_PaintWidget.m_lShape)
+            self.m_PaintWidget.m_dLayers = cfgObj.m_dLayers
+            self.m_PaintWidget.TransLayersToShape()
         else:
             QMessageBox.information(None, u"路径", u"你没有选中任何文件")
         print u'读取状态图'

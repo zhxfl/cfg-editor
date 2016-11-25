@@ -27,6 +27,7 @@ class BaseShape(object):
         self.m_bDiamond = False
         self.m_bDottedLine = False
         self.m_bComment = False
+        self.m_sLayerName = ""
 
         #是否被选中
         self.m_color = False
@@ -322,12 +323,21 @@ class Rect(BaseShape):
         self.m_curConner = -1
         self.m_bRect = True
 
+    def GetLabelMaxWidth(self, painter):
+        FontObj = QFontMetrics(painter.fontMetrics())
+        nCurLen = FontObj.width(self.m_sLayerName)
+        self.m_end = self.m_start + QPoint(nCurLen + 20, 20)
+        return nCurLen
+
     def paint(self, painter):
         self.setPainter(painter)
+        self.GetLabelMaxWidth(painter)
+
         painter.drawRoundRect(self.m_start.x(), self.m_start.y(),
                          self.m_end.x() - self.m_start.x(),
                          self.m_end.y() - self.m_start.y())
-        painter.drawText(QRect(self.m_start, self.m_end), Qt.AlignCenter, BaseShape.s_dState[self.m_stateId])
+        painter.drawText(QRect(self.m_start, self.m_end), Qt.AlignCenter,
+                self.m_sLayerName)
 
         if self.hasCorner() != -1:
             lPoint = []

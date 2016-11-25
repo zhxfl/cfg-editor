@@ -57,3 +57,34 @@ class LineEditor(QDialog):
         print u'线段状态编辑框关闭'
 
 
+class LayerEditor(QDialog):
+    def __init__(self, layerObj, parent = None):
+        self.m_layerObj = layerObj
+        QWidget.__init__(self, parent)
+        self.setWindowTitle(u'线段编辑框')
+        self.m_lCombo = []
+        lLabels = []
+        for i in range(len(self.m_ShapeObj.m_lCondition) + 2):
+            lLabels.append(u'条件' + str(i))
+
+        grid = QGridLayout()
+        for i in range(len(lLabels)):
+            labelObj = QLabel(lLabels[i])
+            grid.addWidget(labelObj, i + 1, 1)
+            comboObj = QComboBox()
+            for (key, value) in BaseShape.BaseShape.s_dCondition.items():
+                comboObj.addItem(value)
+                comboObj.setCurrentIndex(self.m_ShapeObj.GetCondiction(i))
+                grid.addWidget(comboObj, i + 1, 2)
+            self.m_lCombo.append(comboObj)
+        self.setLayout(grid)
+
+    def closeEvent(self, event):
+        lCondition = []
+        for ComboObj in self.m_lCombo:
+            nIndex = ComboObj.currentIndex()
+            if nIndex != 0:
+                lCondition.append(nIndex)
+        self.m_ShapeObj.SetCondition(lCondition)
+        print 'update condictions',lCondition,self.m_ShapeObj.m_lCondition
+        print u'线段状态编辑框关闭'

@@ -8,19 +8,23 @@ import Editor
 import copy
 import History
 import AnimationFactory
+import Queue
+import copy
+import pdb
 
 class PaintWidget(QWidget):
     """
-        @画板
+        @ 画板
     """
     def __init__(self):
         QWidget.__init__(self)
         self.m_curShapeCode = -1 #记录当前是划线模式还是画矩形模式
         self.m_shape = None
         self.m_perm = True
-        self.m_lShape = []
+        self.m_dShape = {} #图元列表
+        self.m_dLayers = {} #网络配置的层字典
         self.m_curAction = None #画线或者画矩形回调句柄
-        self.m_chooseShape = None: #被选中的图元ID
+        self.m_chooseShape = None #被选中的图元ID
         self.m_prePoint = QPoint()
         self.m_curPoint = QPoint()
         self.setFocusPolicy(Qt.ClickFocus) #??
@@ -29,6 +33,62 @@ class PaintWidget(QWidget):
         #ActionObj = AnimationFactory.EllipseMoveAction(QPoint(1,1), QPoint(1600, 800), self.AfterAction)
         #self.m_AnimationObj.Push(ActionObj)
         self.m_dTips = {}
+#private
+    def TransLayersToShape(self):
+        """
+            @ 将配置表神经网络信息转化成待渲染的图元
+        """
+        #寻找起点,Layer的inputs不是一个Layer，说明其输入是特征，那么该层就是起点
+        setMark = set([])
+        queObj = Queue.Queue()
+        self.m_dShape = {}
+        curPoint = QPoint(500, 20)
+        for (sName, layer) in self.m_dLayers.items():
+            lInputs = layer.GetInputs()
+            for sInputName in lInputs:
+                if not self.m_dLayers.has_key(sInputName) :
+                    queObj.put(layer.GetName())
+                    setMark.add(layer.GetName())
+
+                    shapeObj = BaseShape.Rect()
+                    shapeObj.setStart(curPoint)
+                    shapeObj.m_sLayerName = layer.GetName()
+                    shapeObj.GetLabelMaxWidth(QPainter(self))
+
+                    self.m_dShape[sName] = shapeObj
+            
+        #BFS遍历m_dLayers,根据层次信息生成坐标
+        while not queObj.empty():
+            sLayerName = queObj.get()
+            lOutputs = self.m_dLayers[sLayerName].GetOutpus()
+            curShape = self.m_dShape[sLayerName]
+            curPoint = copy.copy(curShape.m_start)
+            curPoint += QPoint(0, 40)
+            for sOutputLayerName in lOutputs:
+                print sLayerName, sOutputLayerName
+                #统一计算，让其居中TODO
+                if sOutputLayerName not in setMark:
+                    #画矩形
+                    painter = QPainter(self)
+                    shapeObj = BaseShape.Rect()
+                    shapeObj.setStart(curPoint)
+                    shapeObj.m_sLayerName = sOutputLayerName
+                    self.m_dShape[sOutputLayerName] = shapeObj
+                    curPoint = QPoint(shapeObj.GetLabelMaxWidth(painter) + 40 + curPoint.x(),
+                            curPoint.y())
+                    #画线条
+                    lineObj = BaseShape.Line()
+                    startPoint = self.m_dShape[sLayerName].getMid()
+                    endPoint =  self.m_dShape[sOutputLayerName].getMid()
+                    startPoint = self.GetRectVLineInterPoint(self.m_dShape[sLayerName], startPoint, endPoint)
+                    endPoint = self.GetRectVLineInterPoint(self.m_dShape[sOutputLayerName], startPoint, endPoint)
+
+                    lineObj.setStart(startPoint)
+                    lineObj.setEnd(endPoint)
+                    self.m_dShape[sLayerName + sOutputLayerName] = lineObj
+
+                    queObj.put(sOutputLayerName)
+                    setMark.add(sOutputLayerName)
 
     def SetCurrentShape(self, s, action):
         self.m_curAction = action
@@ -36,6 +96,8 @@ class PaintWidget(QWidget):
             self.m_curShapeCode = s
 
     def GetSpacePoint(self):
+        #TODO 
+        return
         nX = 0
         nY = 0
         for shape in self.m_lShape:
@@ -51,6 +113,8 @@ class PaintWidget(QWidget):
         return QPoint(nX, nY)
 
     def AddComment(self):
+        #TODO
+        return 
         for shape in self.m_lShape:
             if shape.isLine():
                 if len(shape.m_lCondition) > 0 and shape.m_nCommentId == -1:
@@ -67,6 +131,8 @@ class PaintWidget(QWidget):
                         break
 
     def RemoveComment(self, nId):
+        #TODO
+        return
         for i in range(len(self.m_lShape)):
             if self.m_lShape[i].m_nId == nId:
                 del self.m_lShape[i]
@@ -78,6 +144,8 @@ class PaintWidget(QWidget):
                     shape.m_nCommentId = -1
 
     def CheckErrorCommment(self):
+        #TODO
+        return 
         for shape in self.m_lShape:
             if shape.isLine():
                 if len(shape.m_lCondition) == 0 and shape.m_nCommentId != -1:
@@ -85,15 +153,22 @@ class PaintWidget(QWidget):
         return -1
 
     def paintEvent(self, event):
+        """
+            @每帧绘制回调
+        """
         painter = QPainter(self)
         painter.setBrush(Qt.white)
         painter.drawRect(0, 0, self.width(), self.height())
-        self.AddComment()
+        #self.AddComment()
         #self.m_AnimationObj.Update(painter)
-        for shape in self.m_lShape:
-            shape.paint(painter)
-        if self.m_shape != None:
-            self.m_shape.paint(painter)
+        for (sName, shape) in self.m_dShape.items():
+            if shape.isLine():
+                shape.paint(painter)
+        for (sName, shape) in self.m_dShape.items():
+            if shape.isRect():
+                shape.paint(painter)
+        #if self.m_shape != None:
+        #    self.m_shape.paint(painter)
         #AnimationFactory.AnimationSingleton().Update()
 
     def Update(self):

@@ -2,6 +2,10 @@
 import pdb
 class BaseLayer(object):
     s_sName = 'name'
+    s_sType = 'type'
+    s_sInputs = 'inputs'
+    s_sOutputs = 'outputs'
+    s_sConvAlgoType = 'convAlgoType'
     def __init__(self, sContext):
         """
             @sContext 待解析的字符串
@@ -9,6 +13,8 @@ class BaseLayer(object):
         #public
         self.m_dKeys = {}
         lLine = sContext.split("\n")
+        self.m_dKeys[BaseLayer.s_sInputs] = []
+        self.m_dKeys[BaseLayer.s_sOutputs] = []
         #建立字典
         for sLine in lLine:
             if sLine.find("=") != -1:
@@ -16,18 +22,34 @@ class BaseLayer(object):
                 sLine = sLine.replace('\n', '')
                 sSplit = sLine.split('=')
                 assert len(sSplit) == 2
-                self.m_dKeys[sSplit[0]] = sSplit[1]
-        print self.m_dKeys
+                if sSplit[0] == BaseLayer.s_sInputs:
+                    self.AppendInput(sSplit[1])
+                elif  sSplit[0] == BaseLayer.s_sOutputs:
+                    self.AppendOutput(sSplit[1])
+                else:
+                    self.m_dKeys[sSplit[0]] = sSplit[1]
+        #print self.m_dKeys
+
+    def AppendOutput(self, sName):
+        self.m_dKeys[BaseLayer.s_sOutputs].append(sName)
+
+    def AppendInput(self, sName):
+        self.m_dKeys[BaseLayer.s_sInputs].append(sName)
 
     def GetName(self):
+        assert self.m_dKeys.has_key(BaseLayer.s_sName)
         return self.m_dKeys[BaseLayer.s_sName]
+
+    def GetInputs(self):
+        return self.m_dKeys[BaseLayer.s_sInputs]
+
+    def GetOutpus(self):
+        return self.m_dKeys[BaseLayer.s_sOutputs]
 
 class ConvLayer(BaseLayer):
     #静态成员变量
-    s_sType = 'type'
-    s_sInputs = 'inputs'
-    s_sConvAlgoType = 'convAlgoType'
-    s_sConvDiffAlgoType = 'sConvDiffAlgoType'
+    s_sConvAlgoType = 'convAlgoType' # TODO
+    s_sConvDiffAlgoType = 'ConvDiffAlgoType'
     s_sWidth= 'width'
     s_sHeight = "height"
     s_sInputMaps = "inputMaps"
@@ -46,9 +68,7 @@ class ConvLayer(BaseLayer):
 
 class PoolingLayer(BaseLayer):
     #静态成员变量
-    s_sType = "type"
-    s_sInputs = "inputs"
-    s_sPoolingTyp = "poolingType"
+    s_sPoolingTyp = "poolingType" # TODO
     s_sWidth = "width"
     s_sHeight = "height"
     s_sWinWidth = "winWidth"
@@ -58,14 +78,10 @@ class PoolingLayer(BaseLayer):
     s_sInputMaps = "inputMaps"
 
 class SoftmaxLayer(BaseLayer):
-    s_sType = "type"
-    s_sInputs = "inputs"
     s_sInDim = "inDim"
     s_sOutDim = "outDim"
 
 class LossCeLayer(BaseLayer):
-    s_sType = "type"
-    s_sInputs = "inputs"
     s_sLabel = "label"
     s_sCostType = "cost-type"
     s_sInDim = "inDim"
@@ -151,7 +167,7 @@ class Config(object):
                 if self.m_dLayers.has_key(sInputName):
                     self.m_dLayers[sInputName].AppendOutput(sName)
 
-        print self.m_dLayers
+        #print self.m_dLayers
 
 #if __name__ == "__main__":
 #    cfgObj = Config("./image_train.cfg")
