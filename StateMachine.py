@@ -7,27 +7,7 @@ import BaseShape
 import json
 import History
 import Config
-class Example(QWidget):
-
-    def __init__(self):
-        super(Example, self).__init__()
-        self.initUI()
-
-    def initUI(self):
-        title = QLabel('Tile')
-        author = QLabel('Author')
-        review = QLabel('Review')
-        
-        titleEdit = QLineEdit()
-        authorEdit = QLineEdit()
-        reviewEdit = QTextEdit()
-
-        grid = QGridLayout()
-        grid.setSpacing(10)
-        grid.addWidget(title, 1, 0)
-        grid.addWidget(titleEdit, 1, 1)
-        self.setLayout(grid)
-
+import Editor
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -37,12 +17,12 @@ class MainWindow(QMainWindow):
         #申请一个新的QWidget修改来添加grid布局器
         mainQWidget = QWidget()
         self.setCentralWidget(mainQWidget)
+
         #布局器
         grid = QGridLayout()
         grid.setSpacing(2)
         mainQWidget.setLayout(grid)
 
-        #self.m_PaintWidget.Update()
         #菜单栏
         FileMemu = self.menuBar().addMenu(u"菜单")
         SaveAction = QAction(u"保存", FileMemu)
@@ -60,20 +40,24 @@ class MainWindow(QMainWindow):
         Scroll.setAutoFillBackground(True)
         Scroll.setWidgetResizable(True)
         grid.addWidget(Scroll, 0, 1)
-        
-        example = Example()
-        grid.addWidget(example, 0, 0)
+
+        #layer的属性编辑
+        editor = Editor.LayerConfigEditor()
+        grid.addWidget(editor, 0, 0)
         self.setCentralWidget(mainQWidget)
+        
+        #向画板传递editor的句柄，方便回调编辑
+        self.m_PaintWidget.m_editor = editor
 
         #设置布局器比例
-        grid.setColumnStretch(0, 1)
-        grid.setColumnStretch(1, 5)
+        grid.setColumnStretch(0, 3)
+        grid.setColumnStretch(1, 10)
 
         #添加工具栏,提供属性编辑
         editorTooBar = QToolBar()
         self.addToolBar(Qt.TopToolBarArea, editorTooBar)
 
-        #TODO
+        #TODO  
         self.Read()
 
     def Save(self):
@@ -130,7 +114,7 @@ class MainWindow(QMainWindow):
 if __name__ == "__main__" :
     q = QApplication(sys.argv)
     w = MainWindow()
-    w.setWindowTitle(u"状态机编辑器")
+    w.setWindowTitle(u"神经网络配置表编辑器")
     w.resize(1600, 800)
     w.show()
     q.exec_()

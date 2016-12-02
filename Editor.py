@@ -1,5 +1,8 @@
 #coding: utf-8
 from PyQt4.QtGui import *
+from PyQt4 import QtGui, QtCore
+from PyQt4.QtCore import *
+from PyQt4.QtGui import *
 import BaseShape
 
 class RectEditor(QDialog):
@@ -24,7 +27,8 @@ class RectEditor(QDialog):
         self.m_ShapeObj.SetStateId(self.m_Combo.currentIndex())
         print u'矩形状态编辑框关闭'
 
-class LineEditor(QDialog):
+#创建网络层
+class CreateLayerEditor(QDialog):
     def __init__(self, ShapeObj, parent = None):
         self.m_ShapeObj = ShapeObj
         QWidget.__init__(self, parent)
@@ -56,7 +60,7 @@ class LineEditor(QDialog):
         print 'update condictions',lCondition,self.m_ShapeObj.m_lCondition
         print u'线段状态编辑框关闭'
 
-
+#每层网络的所有配置编辑
 class LayerEditor(QDialog):
     def __init__(self, layerObj, parent = None):
         self.m_layerObj = layerObj
@@ -88,3 +92,29 @@ class LayerEditor(QDialog):
         self.m_ShapeObj.SetCondition(lCondition)
         print 'update condictions',lCondition,self.m_ShapeObj.m_lCondition
         print u'线段状态编辑框关闭'
+
+class LayerConfigEditor(QWidget):
+    def __init__(self):
+        super(LayerConfigEditor, self).__init__()
+        self.initUI()
+
+    def initUI(self):
+        grid = QGridLayout()
+        self.setLayout(grid)
+
+    def ShowLayerConfig(self, layer):
+        #inputs
+        #outputs
+        table = QTableWidget();
+        table.setColumnCount(2);
+        table.setRowCount(len(layer.m_dKeys));
+        
+        grid = self.layout()
+        grid.addWidget(table, 0, 0)
+        nIdx = 0
+        for (sName, value) in layer.m_dKeys.items() :
+            table.setItem(nIdx, 0, QTableWidgetItem(sName))
+            table.setItem(nIdx, 1, QTableWidgetItem(str(value)))
+            #第一列不支持编辑
+            table.item(nIdx, 0).setFlags(table.item(nIdx, 0).flags() & (~ Qt.ItemIsEditable))
+            nIdx = nIdx +  1

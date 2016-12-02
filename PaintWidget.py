@@ -24,16 +24,15 @@ class PaintWidget(QWidget):
         self.m_dShape = {} #图元列表
         self.m_dLayers = {} #网络配置的层字典
         self.m_curAction = None #画线或者画矩形回调句柄
-        self.m_chooseShape = None #被选中的图元ID
+        self.m_sChooseShapeName = None #被选中的形状的名字，包括矩形和线条
         self.m_prePoint = QPoint()
         self.m_curPoint = QPoint()
-        self.setFocusPolicy(Qt.ClickFocus) #??
+        self.setFocusPolicy(Qt.ClickFocus)
         self.m_bMoving = False
         self.m_AnimationObj = AnimationFactory.Animation()
-        #ActionObj = AnimationFactory.EllipseMoveAction(QPoint(1,1), QPoint(1600, 800), self.AfterAction)
-        #self.m_AnimationObj.Push(ActionObj)
         self.m_dTips = {}
-#private
+        self.m_editor = None
+
     def TransLayersToShape(self):
         """
             @ 将配置表神经网络信息转化成待渲染的图元
@@ -42,21 +41,39 @@ class PaintWidget(QWidget):
         setMark = set([])
         queObj = Queue.Queue()
         self.m_dShape = {}
-        curPoint = QPoint(500, 20)
+        curPoint = QPoint(100, 20)
         for (sName, layer) in self.m_dLayers.items():
+            if self.m_sChooseShapeName == None:
+                self.m_sChooseShapeName = sName
             lInputs = layer.GetInputs()
-            for sInputName in lInputs:
-                if not self.m_dLayers.has_key(sInputName) :
-                    queObj.put(layer.GetName())
-                    setMark.add(layer.GetName())
+            if len(lInputs) == 0:
+                queObj.put(layer.GetName())
+                setMark.add(layer.GetName())
 
-                    shapeObj = BaseShape.Rect()
-                    shapeObj.setStart(curPoint)
-                    shapeObj.m_sLayerName = layer.GetName()
-                    shapeObj.GetLabelMaxWidth(QPainter(self))
+                shapeObj = BaseShape.Rect()
+                shapeObj.setStart(copy.deepcopy(curPoint))
+                curPoint += QPoint(250, 0)
+                shapeObj.m_sLayerName = layer.GetName()
+                shapeObj.GetLabelMaxWidth(QPainter(self))
+                print "begin", sName
+                        
+                self.m_dShape[sName] = shapeObj
+            else:
+                for sInputName in lInputs:
+                    if not self.m_dLayers.has_key(sInputName) :
+                        queObj.put(layer.GetName())
+                        setMark.add(layer.GetName())
 
-                    self.m_dShape[sName] = shapeObj
-            
+                        shapeObj = BaseShape.Rect()
+                        shapeObj.setStart(copy.deepcopy(curPoint))
+                        curPoint += QPoint(250, 0)
+                        shapeObj.m_sLayerName = layer.GetName()
+                        shapeObj.GetLabelMaxWidth(QPainter(self))
+
+                        self.m_dShape[sName] = shapeObj
+                        print "begin", sName
+                        break
+        
         #BFS遍历m_dLayers,根据层次信息生成坐标
         while not queObj.empty():
             sLayerName = queObj.get()
@@ -66,7 +83,7 @@ class PaintWidget(QWidget):
             curPoint += QPoint(0, 40)
             for sOutputLayerName in lOutputs:
                 print sLayerName, sOutputLayerName
-                #统一计算，让其居中TODO
+                #统一计算，让其居中
                 if sOutputLayerName not in setMark:
                     #画矩形
                     painter = QPainter(self)
@@ -85,6 +102,9 @@ class PaintWidget(QWidget):
 
                     lineObj.setStart(startPoint)
                     lineObj.setEnd(endPoint)
+                    lineObj.m_left = sLayerName
+                    lineObj.m_right = sOutputLayerName
+
                     self.m_dShape[sLayerName + sOutputLayerName] = lineObj
 
                     queObj.put(sOutputLayerName)
@@ -182,6 +202,7 @@ class PaintWidget(QWidget):
         print 'after action'
 
     def mouseDoubleClickEvent(self, event):
+        return
         #鼠标双击操作，弹出属性框编辑
         if self.m_chooseShape != None:
             if self.m_chooseShape.isRect() == True:
@@ -194,21 +215,26 @@ class PaintWidget(QWidget):
                 print 'Double click ',self.m_chooseShape.GetStateDescribe()
 
     def PressChooseShape(self, event):
-        if self.m_chooseShape != None:
-            self.m_chooseShape.setColor(False)
-            self.m_chooseShape.m_curConner = - 1
-            self.m_chooseShape = None
+        """
+            @处理单击事件选中的操作
+        """
+        #取消被选中的颜色
+        if self.m_sChooseShapeName != None:
+            self.m_dShape[self.m_sChooseShapeName].setColor(False)
+            self.m_sChooseShapeName = None
             self.update()
-        for shape in self.m_lShape:
+
+        #判断是否选中
+        for (sName, shape) in self.m_dShape.items():
             if shape.isRect() == True:
                 if self.inRect(event.pos(), shape):
-                    self.m_bMoving = True
                     print 'choose Rect', shape.m_nId
-                    self.m_chooseShape = shape
-                    self.m_chooseShape.setColor(True)
+                    self.m_sChooseShapeName = sName
+                    self.m_dShape[self.m_sChooseShapeName].setColor(True)
                     self.update()
+                    self.m_editor.ShowLayerConfig(self.m_dLayers[self.m_sChooseShapeName])
                     return
-            elif shape.isLine() == True and shape.isRing() == False:
+            elif shape.isLine() == True:
                 #求出点到直线的距离
                 p1 = Geometry.PointToLineInterPoint(shape.m_start, shape.m_end, event.pos())
                 p2 = event.pos()
@@ -218,54 +244,22 @@ class PaintWidget(QWidget):
                 if len <= 3 and self.inRect(p1, shape):
                     self.m_bMoving = True
                     print 'choose Line', shape.m_nId
-                    self.m_chooseShape = shape
-                    self.m_chooseShape.setColor(True)
-                    self.update()
-                    return
-            elif shape.isLine() == True and shape.isRing() == True:
-                print 'choose Ring', shape.m_nId
-                startPoint = QPoint(shape.m_start.x() + (shape.m_end.x() - shape.m_start.x()) / 4, shape.m_start.y())
-                startPoint += QPoint(0.0, (shape.m_start.y() - shape.m_end.y()) / 2)
-                end = QPoint(shape.m_start.x() + (shape.m_end.x() - shape.m_start.x()) / 4 * 3, shape.m_start.y())
-                tmp = BaseShape.Rect()
-                tmp.m_start = startPoint
-                tmp.m_end = end
-                if self.inRect(event.pos(), tmp):
-                    self.m_bMoving = True
-                    self.m_chooseShape = shape
-                    self.m_chooseShape.setColor(True)
-                    self.update()
-                    return
-            elif shape.isDiamond() == True:
-                if self.inRect(event.pos(), shape):
-                    self.m_bMoving = True
-                    print 'choose Diamond', shape.m_nId
-                    self.m_chooseShape = shape
-                    self.m_chooseShape.setColor(True)
-                    self.update()
-                    return
-            elif shape.isComment() == True:
-                if shape.InComment(event.pos()):
-                    self.m_bMoving = True
-                    print 'choose Comment', shape.m_nId
-                    self.m_chooseShape = shape
-                    self.m_chooseShape.setColor(True)
+                    self.m_sChooseShapeName = sName
+                    self.m_dShape[self.m_sChooseShapeName].setColor(True)
                     self.update()
                     return
 
     def mousePressEvent(self, event):
-        print 'press'
         self.m_prePoint = event.pos()
-        #已经有被选中的矩形或线条，判断是是否需要编辑
-        if self.m_chooseShape != None:
-            if self.m_chooseShape.getCorner(event.pos()) != -1:
-                    return
+        #判断是否选中了直线的一端，如果选中了，需要触发编辑功能
+        if self.m_sChooseShapeName != None and self.m_sChooseShapeName != "":
+            shapeObj = self.m_dShape[self.m_sChooseShapeName]
+            if shapeObj.isLine() == True:
+                if shapeObj.getCorner(event.pos()) != -1:
+                    return;
 
-        #没有画图任务，这里触发一个选中操作
-        if self.m_curShapeCode == -1:
-            self.PressChooseShape(event)
-            print 'choose shape code',self.m_curShapeCode
-            return
+        self.PressChooseShape(event)
+        return;
 
         #新建线条
         if self.m_curShapeCode == BaseShape.BaseShape.s_Line:
@@ -282,66 +276,27 @@ class PaintWidget(QWidget):
             self.m_chooseShape = None
 
     def MoveReShape(self, event):
-        if self.m_chooseShape.isRect() == True:
-            self.m_curPoint = event.pos()
-            if self.m_chooseShape.CanReshap(self.m_curPoint - self.m_prePoint):
-                #先对线进行移动
-                for shape in self.m_lShape:
-                    if shape.isLine() == True:
-                        shape.followRect(self.m_chooseShape, self.m_curPoint - self.m_prePoint)
-                #重新画矩形
-                self.m_chooseShape.reShape(self.m_curPoint - self.m_prePoint)
-            self.m_prePoint = self.m_curPoint
+        if self.m_sChooseShapeName == "":
+            return
 
-        elif self.m_chooseShape.isLine() == True:
-            if self.m_chooseShape.hasCorner() != -1:
+        shapeObj = self.m_dShape[self.m_sChooseShapeName]
+        if shapeObj.isLine() == True:
+            if shapeObj.hasCorner() != -1:
                 self.m_curPoint = event.pos()
-                self.m_chooseShape.reShape(self.m_curPoint - self.m_prePoint)
+                shapeObj.reShape(self.m_curPoint - self.m_prePoint);
                 self.m_prePoint = self.m_curPoint
 
-        elif self.m_chooseShape.isDiamond() == True:
-            if self.m_chooseShape.hasCorner() != -1:
-                self.m_curPoint = event.pos()
-                if self.m_chooseShape.CanReshap(self.m_curPoint - self.m_prePoint):
-                    self.m_chooseShape.reShape(self.m_curPoint - self.m_prePoint)
-                    self.m_prePoint = self.m_curPoint
-                    for shape in self.m_lShape:
-                        if shape.isLine() == True:
-                            shape.FollowDiamond(self.m_chooseShape)
         self.update()
 
     def mouseMoveEvent(self, event):
         """
             @鼠标拖动事件回调
         """
-        if self.m_chooseShape != None and self.m_chooseShape.hasCorner() != -1:
-            self.MoveReShape(event)
-            return
-
-        #处理被选中的物体的拖动，这里线是不能被拖动的
-        DeltaMoveObj = QPoint()
-        if self.m_chooseShape != None and self.m_chooseShape.isRect() == True:
-            if self.m_bMoving == True:
-                self.m_bMoving = False
-                self.m_chooseShape.setColor(False)
-                History.Push(self.m_lShape)
-                self.m_chooseShape.setColor(True)
-
-            self.m_curPoint = event.pos()
-            DeltaMoveObj = self.m_curPoint - self.m_prePoint
-            self.m_chooseShape.move(DeltaMoveObj)
-            #所有线段检查是否和这个矩形有关系，如果有，移动
-            for shape in self.m_lShape:
-                if shape.isLine() == True:
-                    shape.move(DeltaMoveObj, self.m_chooseShape.m_nId)
-            self.m_prePoint = self.m_curPoint
-            self.update()
-            return
-
-        if self.m_shape and self.m_perm == False:
-            self.m_shape.setEnd(event.pos())
-            self.update()
-            return
+        if self.m_sChooseShapeName != None and self.m_sChooseShapeName != "":
+            shapeObj = self.m_dShape[self.m_sChooseShapeName]
+            if shapeObj.hasCorner() != -1:
+                self.MoveReShape(event)
+                return 
 
     def keyPressEvent(self, event):
         """
@@ -376,17 +331,26 @@ class PaintWidget(QWidget):
         elif event.modifiers() == (Qt.ControlModifier) and event.key() == Qt.Key_R:
             assert False
 
-    def RemoveLine(self, nId):
-        nCommentId = 0
-        for i in range(len(self.m_lShape)):
-            if self.m_lShape[i].m_nId == nId:
-                nCommentId = self.m_lShape[i].m_nCommentId
-                del self.m_lShape[i]
-                break
-        for i in range(len(self.m_lShape)):
-            if self.m_lShape[i].m_nId == nCommentId:
-                del self.m_lShape[i]
-                break
+    def RemoveLine(self, sName):
+        """
+            @ 移除一个连接 
+            @ 清理所有和这个连接有关的层的inputs和outputs
+            @ 重新绘制图元
+        """
+        print "RemoveLine", sName
+        if self.m_dShape.has_key(sName) == False:
+            return
+
+        shapeObj = self.m_dShape[sName]
+
+        sLeftLayerName = shapeObj.m_left
+        sRightLayerName = shapeObj.m_right
+        print "del", sLeftLayerName, sRightLayerName
+        
+        self.m_dLayers[sLeftLayerName].delOutput(sRightLayerName)
+        self.m_dLayers[sRightLayerName].delInput(sLeftLayerName)
+        
+        self.TransLayersToShape()
 
     def RemoveRect(self, nId):
         for i in range(len(self.m_lShape)):
@@ -411,21 +375,17 @@ class PaintWidget(QWidget):
 
     #重新編輯圖元結束
     def ReleaseReshape(self, event):
-        History.Push(self.m_lShape)
-        if self.m_chooseShape.isRect() == True or self.m_chooseShape.isDiamond() == True:
-            self.m_chooseShape.m_curConner = -1
-        elif self.m_chooseShape.isLine() == True:
+        if self.m_sChooseShapeName != None and self.m_sChooseShapeName != "" and self.m_dShape[self.m_sChooseShapeName].isLine() == True:
+            shapeObj = self.m_dShape[self.m_sChooseShapeName]
             self.m_curPoint = event.pos()
-            self.m_chooseShape.reShape(self.m_curPoint - self.m_prePoint)
+            shapeObj.reShape(self.m_curPoint - self.m_prePoint)
             self.m_prePoint = self.m_curPoint
-            for i in range(len(self.m_lShape)):
-                if self.m_lShape[i] == self.m_chooseShape:
-                    del self.m_lShape[i]
-                    break
-            self.m_shape = self.m_chooseShape
-            self.m_chooseShape.m_curConner = -1
-            self.m_curShapeCode = BaseShape.BaseShape.s_Line
-            self.ReleaseCreate(event)
+            #检查线段是否合理,不合理就将其删除
+            if self.checkLineLegal() == False:
+                self.RemoveLine(self.m_sChooseShapeName)
+                self.m_sChooseShapeName = None
+        self.Update()
+
 
     #創建新的圖元
     def ReleaseCreate(self, event):
@@ -455,71 +415,61 @@ class PaintWidget(QWidget):
 
 
     def mouseReleaseEvent(self, event):
-        if self.m_chooseShape != None and self.m_chooseShape.hasCorner() != -1:
+        if self.m_sChooseShapeName != None or self.m_sChooseShapeName != "":
             self.ReleaseReshape(event)
-            return
-
-        if self.m_curShapeCode != -1:
-            self.ReleaseCreate(event)
             return
 
     #线段的起点和终点必须在矩形的内部
     def checkLineLegal(self):
-        flag1 = -1
-        flag2 = -1
-        for i in range(len(self.m_lShape)):
-            if self.m_lShape[i].isLine():
-                continue;
-            if self.m_lShape[i].isRect():
-                if self.m_lShape[i].InRect(self.m_shape.m_start):
-                    flag1 = i
-                if self.m_lShape[i].InRect(self.m_shape.m_end):
-                    flag2 = i
-            if self.m_lShape[i].isDiamond():
-                if self.m_lShape[i].InDiamond(self.m_shape.m_start):
-                    flag1 = i
-                if self.m_lShape[i].InDiamond(self.m_shape.m_end):
-                    flag2 = i
+        if self.m_sChooseShapeName == None or self.m_sChooseShapeName == "":
+            return False
 
-        if flag1 != -1 and flag2 != -1:
+        flag1 = ""
+        flag2 = ""
+        curLineObj = self.m_dShape[self.m_sChooseShapeName]
+        if curLineObj.isLine() == False:
+            return False
+
+        for (sName, shapeObj) in self.m_dShape.items():
+            if shapeObj.isRect() == True:
+                if shapeObj.InRect(curLineObj.m_start):
+                    flag1 = sName
+                if shapeObj.InRect(curLineObj.m_end):
+                    flag2 = sName
+        #不能画环
+        if flag1 == flag2:
+            return False
+
+        print "editor", flag1, flag2
+
+        if flag1 != "" and flag2 != "":
             #重複的邊
-            for ShapeObj in self.m_lShape:
-                    if ShapeObj.isLine():
-                        if ShapeObj.m_left ==  self.m_lShape[flag1].m_nId and ShapeObj.m_right ==  self.m_lShape[flag2].m_nId:
-                            return False
+            for (sName, shapeObj) in self.m_dShape.items():
+                if self.m_sChooseShapeName == sName:
+                    continue
+                if shapeObj.isLine():
+                    if shapeObj.m_left == flag1 and shapeObj.m_right == flag2:
+                        return False
+
             #非環
             if flag1 != flag2:
                 start = QPoint()
-                if self.m_lShape[flag1].isRect():
-                    start = self.GetRectVLineInterPoint(self.m_lShape[flag1], self.m_shape.m_start, self.m_shape.m_end)
-                elif self.m_lShape[flag1].isDiamond():
-                    start = self.m_lShape[flag1].GetInterPoint(self.m_shape.m_start)
+                if self.m_dShape[flag1].isRect():
+                    start = self.GetRectVLineInterPoint(self.m_dShape[flag1], curLineObj.m_start, curLineObj.m_end)
 
                 end = QPoint()
-                if self.m_lShape[flag2].isRect():
-                    end = self.GetRectVLineInterPoint(self.m_lShape[flag2], self.m_shape.m_start, self.m_shape.m_end)
-                elif self.m_lShape[flag2].isDiamond():
-                    end = self.m_lShape[flag2].GetInterPoint(self.m_shape.m_end)
+                if self.m_dShape[flag2].isRect():
+                    end = self.GetRectVLineInterPoint(self.m_dShape[flag2], curLineObj.m_start, curLineObj.m_end)
 
                 if start == None:
-                    start = copy.deepcopy(self.m_shape.m_start)
+                    start = copy.deepcopy(curLineObj.m_start)
                 if end == None:
-                    end = copy.deepcopy(self.m_shape.m_end)
+                    end = copy.deepcopy(curLineObj.m_end)
 
-                self.m_shape.m_start = start
-                self.m_shape.m_end = end
-                self.m_shape.m_left = self.m_lShape[flag1].m_nId
-                self.m_shape.m_right = self.m_lShape[flag2].m_nId
-                return True
-            #環
-            else:
-                #菱形不能有環
-                if self.m_lShape[flag1].isDiamond():
-                    return False
-                self.m_shape.m_start = copy.deepcopy(self.m_lShape[flag1].m_start)
-                self.m_shape.m_end = copy.deepcopy(self.m_lShape[flag1].m_end)
-                self.m_shape.m_left = copy.deepcopy(self.m_lShape[flag1].m_nId)
-                self.m_shape.m_right = copy.deepcopy(self.m_lShape[flag1].m_nId)
+                curLineObj.m_start = start
+                curLineObj.m_end = end
+                curLineObj.m_left = flag1
+                curLineObj.m_right = flag2
                 return True
         else:
             return False

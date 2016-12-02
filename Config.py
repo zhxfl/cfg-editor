@@ -1,5 +1,4 @@
 #coding: utf-8
-import pdb
 class BaseLayer(object):
     s_sName = 'name'
     s_sType = 'type'
@@ -35,6 +34,20 @@ class BaseLayer(object):
 
     def AppendInput(self, sName):
         self.m_dKeys[BaseLayer.s_sInputs].append(sName)
+
+    def delInput(self, sName):
+        lInputs = self.m_dKeys[BaseLayer.s_sInputs]
+        for i in range(len(lInputs)):
+            if lInputs[i] == sName:
+                del lInputs[i]
+                return
+
+    def delOutput(self, sName):
+        lOutputs = self.m_dKeys[BaseLayer.s_sOutputs]
+        for i in range(len(lOutputs)):
+            if lOutputs[i] == sName:
+                del lOutputs[i]
+                return
 
     def GetName(self):
         assert self.m_dKeys.has_key(BaseLayer.s_sName)
