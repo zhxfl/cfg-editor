@@ -18,20 +18,15 @@ class PaintWidget(QWidget):
     """
     def __init__(self):
         QWidget.__init__(self)
-        self.m_curShapeCode = -1 #记录当前是划线模式还是画矩形模式
-        self.m_shape = None
-        self.m_perm = True
+
         self.m_dShape = {} #图元列表
         self.m_dLayers = {} #网络配置的层字典
-        self.m_curAction = None #画线或者画矩形回调句柄
         self.m_sChooseShapeName = None #被选中的形状的名字，包括矩形和线条
-        self.m_prePoint = QPoint()
-        self.m_curPoint = QPoint()
+        self.m_prePoint = QPoint() #拖动线段时的坐标
+        self.m_curPoint = QPoint() #拖动线条时的坐标
+        self.m_editor = None #属性编辑框
+
         self.setFocusPolicy(Qt.ClickFocus)
-        self.m_bMoving = False
-        self.m_AnimationObj = AnimationFactory.Animation()
-        self.m_dTips = {}
-        self.m_editor = None
 
     def TransLayersToShape(self):
         """
@@ -109,68 +104,21 @@ class PaintWidget(QWidget):
 
                     queObj.put(sOutputLayerName)
                     setMark.add(sOutputLayerName)
+                else:
+                    #画线条
+                    lineObj = BaseShape.Line()
+                    startPoint = self.m_dShape[sLayerName].getMid()
+                    endPoint =  self.m_dShape[sOutputLayerName].getMid()
+                    startPoint = self.GetRectVLineInterPoint(self.m_dShape[sLayerName], startPoint, endPoint)
+                    endPoint = self.GetRectVLineInterPoint(self.m_dShape[sOutputLayerName], startPoint, endPoint)
 
-    def SetCurrentShape(self, s, action):
-        self.m_curAction = action
-        if s != self.m_curShapeCode:
-            self.m_curShapeCode = s
+                    lineObj.setStart(startPoint)
+                    lineObj.setEnd(endPoint)
+                    lineObj.m_left = sLayerName
+                    lineObj.m_right = sOutputLayerName
 
-    def GetSpacePoint(self):
-        #TODO 
-        return
-        nX = 0
-        nY = 0
-        for shape in self.m_lShape:
-            if shape.m_start.x() > nX:
-                nX = shape.m_start.x()
-            if shape.m_end.x() > nX:
-                nX = shape.m_end.x()
-            if shape.m_start.y() > nY:
-                nY = shape.m_start.y()
-            if shape.m_end.y() > nY:
-                nY = shape.m_start.y()
-        print 'GetSpacePoint',QPoint(nX, nY)
-        return QPoint(nX, nY)
-
-    def AddComment(self):
-        #TODO
-        return 
-        for shape in self.m_lShape:
-            if shape.isLine():
-                if len(shape.m_lCondition) > 0 and shape.m_nCommentId == -1:
-                    #算出最合適的start點
-                    CommentObj = BaseShape.Comment(self.GetSpacePoint(), shape)
-                    self.m_lShape.append(CommentObj)
-                    shape.m_nCommentId = CommentObj.m_nId
-        #刪除非法的注釋
-        while self.CheckErrorCommment() != -1:
-            for i in range(len(self.m_lShape)):
-                if self.m_lShape[i].isLine():
-                    if len(self.m_lShape[i].m_lCondition) == 0 and self.m_lShape[i].m_nCommentId != -1:
-                        self.RemoveComment(self.m_lShape[i].m_nCommentId)
-                        break
-
-    def RemoveComment(self, nId):
-        #TODO
-        return
-        for i in range(len(self.m_lShape)):
-            if self.m_lShape[i].m_nId == nId:
-                del self.m_lShape[i]
-                return
-
-        for shape in  self.m_lShape:
-            if shape.isLine():
-                if shape.m_nCommentId == nId:
-                    shape.m_nCommentId = -1
-
-    def CheckErrorCommment(self):
-        #TODO
-        return 
-        for shape in self.m_lShape:
-            if shape.isLine():
-                if len(shape.m_lCondition) == 0 and shape.m_nCommentId != -1:
-                    return shape.m_nCommentId
-        return -1
+                    self.m_dShape[sLayerName + sOutputLayerName] = lineObj
+                    
 
     def paintEvent(self, event):
         """
@@ -179,8 +127,7 @@ class PaintWidget(QWidget):
         painter = QPainter(self)
         painter.setBrush(Qt.white)
         painter.drawRect(0, 0, self.width(), self.height())
-        #self.AddComment()
-        #self.m_AnimationObj.Update(painter)
+
         for (sName, shape) in self.m_dShape.items():
             if shape.isLine():
                 shape.paint(painter)
@@ -202,21 +149,42 @@ class PaintWidget(QWidget):
         print 'after action'
 
     def mouseDoubleClickEvent(self, event):
-        return
+        """
+            @鼠标双击事件回调
+            @坐标落在空白处，触发生成一个新的层的逻辑
+            @坐标落在矩形内部，触发生成一个新的连接的逻辑
+        """
+        #走单击的逻辑 
+        self.PressChooseShape(event)
+        #触发新建连接的逻辑
+        if self.m_sChooseShapeName != None and self.m_sChooseShapeName != "":
+            shapeObj = self.m_dShape[self.m_sChooseShapeName]
+            lineObj = BaseShape.Line()
+            lineObj.setStart(event.pos())
+            lineObj.setEnd(event.pos())
+            lineObj.m_left = self.m_sChooseShapeName
+            lineObj.m_curConner = 1
+            sName = lineObj.m_left + lineObj.m_left
+            self.m_dShape[sName] = lineObj
+            self.m_sChooseShapeName = sName
+        #触发新建层的逻辑
+        else:
+            print "not imp"
+
         #鼠标双击操作，弹出属性框编辑
-        if self.m_chooseShape != None:
-            if self.m_chooseShape.isRect() == True:
-                editor = Editor.RectEditor(self.m_chooseShape)
-                editor.exec_()
-                print 'Double click ',self.m_chooseShape.GetStateDescribe()
-            elif self.m_chooseShape.isLine() == True:
-                editor = Editor.LineEditor(self.m_chooseShape)
-                editor.exec_()
-                print 'Double click ',self.m_chooseShape.GetStateDescribe()
+        # if self.m_chooseShape != None:
+        #     if self.m_chooseShape.isRect() == True:
+        #         editor = Editor.RectEditor(self.m_chooseShape)
+        #         editor.exec_()
+        #         print 'Double click ',self.m_chooseShape.GetStateDescribe()
+        #     elif self.m_chooseShape.isLine() == True:
+        #         editor = Editor.LineEditor(self.m_chooseShape)
+        #         editor.exec_()
+        #         print 'Double click ',self.m_chooseShape.GetStateDescribe()
 
     def PressChooseShape(self, event):
         """
-            @处理单击事件选中的操作
+            @ 处理单击事件选中的操作
         """
         #取消被选中的颜色
         if self.m_sChooseShapeName != None:
@@ -250,30 +218,21 @@ class PaintWidget(QWidget):
                     return
 
     def mousePressEvent(self, event):
+        """
+            @ 鼠标单击事件
+        """
         self.m_prePoint = event.pos()
         #判断是否选中了直线的一端，如果选中了，需要触发编辑功能
         if self.m_sChooseShapeName != None and self.m_sChooseShapeName != "":
             shapeObj = self.m_dShape[self.m_sChooseShapeName]
             if shapeObj.isLine() == True:
                 if shapeObj.getCorner(event.pos()) != -1:
-                    return;
+                    #启动编辑对m_dLayer的输入输出产生影响
+                    self.RemoveLine( self.m_sChooseShapeName )
+                    return
 
         self.PressChooseShape(event)
         return;
-
-        #新建线条
-        if self.m_curShapeCode == BaseShape.BaseShape.s_Line:
-            self.m_shape = BaseShape.Line()
-        #新建矩形
-        elif self.m_curShapeCode == BaseShape.BaseShape.s_Rect:
-            self.m_shape = BaseShape.Rect()
-
-        self.m_perm = False
-        self.m_shape.setStart(event.pos())
-        self.m_shape.setEnd(event.pos())
-        if self.m_chooseShape != None:
-            self.m_chooseShape.setColor(False)
-            self.m_chooseShape = None
 
     def MoveReShape(self, event):
         if self.m_sChooseShapeName == "":
@@ -292,11 +251,12 @@ class PaintWidget(QWidget):
         """
             @鼠标拖动事件回调
         """
+        #拖动线条的一端
         if self.m_sChooseShapeName != None and self.m_sChooseShapeName != "":
             shapeObj = self.m_dShape[self.m_sChooseShapeName]
             if shapeObj.hasCorner() != -1:
                 self.MoveReShape(event)
-                return 
+                return
 
     def keyPressEvent(self, event):
         """
@@ -345,12 +305,32 @@ class PaintWidget(QWidget):
 
         sLeftLayerName = shapeObj.m_left
         sRightLayerName = shapeObj.m_right
-        print "del", sLeftLayerName, sRightLayerName
+
+        if self.m_dLayers.has_key(sLeftLayerName):
+            self.m_dLayers[sLeftLayerName].delOutput(sRightLayerName)
+        if self.m_dLayers.has_key(sRightLayerName):
+            self.m_dLayers[sRightLayerName].delInput(sLeftLayerName)
+
+    def AddLine(self, sName):
+        """
+            @ 添加一个链接
+            @ 删除对应的层的inputs和outputs
+        """
+        print "addLine", sName
+
+        if self.m_dShape.has_key(sName) == False:
+            return
+
+        shapeObj = self.m_dShape[sName]
+
+        sLeftLayerName = shapeObj.m_left
+        sRightLayerName = shapeObj.m_right
+
+        self.m_dLayers[sLeftLayerName].AppendOutput(sRightLayerName)
+        self.m_dLayers[sRightLayerName].AppendInput(sLeftLayerName)
+        print sLeftLayerName, "append outputs", sRightLayerName
+        print sRightLayerName, "append inputs", sLeftLayerName
         
-        self.m_dLayers[sLeftLayerName].delOutput(sRightLayerName)
-        self.m_dLayers[sRightLayerName].delInput(sLeftLayerName)
-        
-        self.TransLayersToShape()
 
     def RemoveRect(self, nId):
         for i in range(len(self.m_lShape)):
@@ -373,53 +353,47 @@ class PaintWidget(QWidget):
                 return i
         return -1
 
-    #重新編輯圖元結束
     def ReleaseReshape(self, event):
+        """
+            @重新編輯圖元結束
+        """
         if self.m_sChooseShapeName != None and self.m_sChooseShapeName != "" and self.m_dShape[self.m_sChooseShapeName].isLine() == True:
             shapeObj = self.m_dShape[self.m_sChooseShapeName]
             self.m_curPoint = event.pos()
             shapeObj.reShape(self.m_curPoint - self.m_prePoint)
             self.m_prePoint = self.m_curPoint
+            
             #检查线段是否合理,不合理就将其删除
             if self.checkLineLegal() == False:
-                self.RemoveLine(self.m_sChooseShapeName)
+                print "修改线段非法"
+                del self.m_dShape[self.m_sChooseShapeName]
                 self.m_sChooseShapeName = None
+                self.TransLayersToShape()
+            else:
+                print "修改线段合法"
+                self.AddLine(self.m_sChooseShapeName)
+                shapeObj = self.m_dShape[self.m_sChooseShapeName]
+                del self.m_dShape[self.m_sChooseShapeName]
+                self.m_sChooseShapeName = None
+                sName = shapeObj.m_left + shapeObj.m_right
+                self.m_dShape[sName] = shapeObj
+                self.TransLayersToShape()
+
         self.Update()
 
-
-    #創建新的圖元
-    def ReleaseCreate(self, event):
-        #如果是直线，需要判断前后是否落在两个方框内
-        History.Push(self.m_lShape)
-        if self.m_shape.isLine():
-            if self.checkLineLegal() == True:
-                self.m_lShape.append(self.m_shape)
-        elif self.m_shape.isRect():
-            x1 = self.m_shape.m_start.x() - self.m_shape.m_end.x()
-            y1 = self.m_shape.m_start.x() - self.m_shape.m_end.y()
-            if math.fabs(x1) > 10 and math.fabs(y1) > 10:
-                self.m_lShape.append(self.m_shape)
-        elif self.m_shape.isDiamond():
-            x1 = self.m_shape.m_start.x() - self.m_shape.m_end.x()
-            y1 = self.m_shape.m_start.x() - self.m_shape.m_end.y()
-            if math.fabs(x1) > 10 and math.fabs(y1) > 10:
-                self.m_lShape.append(self.m_shape)
-
-        self.m_perm = True
-        self.m_shape = None
-        if self.m_curAction != None:
-            self.m_curAction.setChecked(False)
-        self.m_curAction = None
-        self.m_curShapeCode = -1
-        self.update()
-
-
     def mouseReleaseEvent(self, event):
-        if self.m_sChooseShapeName != None or self.m_sChooseShapeName != "":
-            self.ReleaseReshape(event)
-            return
-
-    #线段的起点和终点必须在矩形的内部
+        """
+            @ 释放鼠标回调函数
+        """
+        # 编辑线段
+        if self.m_sChooseShapeName != None and self.m_sChooseShapeName != "":
+            if self.m_dShape.has_key(self.m_sChooseShapeName) == False:
+                print "without this key", self.m_sChooseShapeName
+                assert False, self.m_sChooseShapeName
+            if self.m_dShape[self.m_sChooseShapeName].isLine() and self.m_dShape[self.m_sChooseShapeName].m_curConner != -1:
+                self.ReleaseReshape(event)
+    
+    # 线段的起点和终点必须在矩形的内部
     def checkLineLegal(self):
         if self.m_sChooseShapeName == None or self.m_sChooseShapeName == "":
             return False
