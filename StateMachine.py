@@ -8,6 +8,7 @@ import json
 import History
 import Config
 import Editor
+import CfgInstance
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -106,7 +107,7 @@ class MainWindow(QMainWindow):
             cfgObj = Config.Config(sPath)
             cfgObj.Read()
             self.m_PaintWidget.m_dLayers = cfgObj.m_dLayers
-            self.m_PaintWidget.TransLayersToShape()
+            self.m_PaintWidget.transLayersToShape()
         else:
             QMessageBox.information(None, u"路径", u"你没有选中任何文件")
         print u'读取状态图'

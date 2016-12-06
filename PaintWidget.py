@@ -7,10 +7,11 @@ import math
 import Editor
 import copy
 import History
-import AnimationFactory
 import Queue
 import copy
 import pdb
+import CfgInstance
+import Config
 
 class PaintWidget(QWidget):
     """
@@ -28,7 +29,7 @@ class PaintWidget(QWidget):
 
         self.setFocusPolicy(Qt.ClickFocus)
 
-    def TransLayersToShape(self):
+    def transLayersToShape(self):
         """
             @ 将配置表神经网络信息转化成待渲染的图元
         """
@@ -36,7 +37,7 @@ class PaintWidget(QWidget):
         setMark = set([])
         queObj = Queue.Queue()
         self.m_dShape = {}
-        curPoint = QPoint(100, 20)
+        curPoint = QPoint(0, 0)
         for (sName, layer) in self.m_dLayers.items():
             if self.m_sChooseShapeName == None:
                 self.m_sChooseShapeName = sName
@@ -47,7 +48,6 @@ class PaintWidget(QWidget):
 
                 shapeObj = BaseShape.Rect()
                 shapeObj.setStart(copy.deepcopy(curPoint))
-                curPoint += QPoint(250, 0)
                 shapeObj.m_sLayerName = layer.GetName()
                 shapeObj.GetLabelMaxWidth(QPainter(self))
                 print "begin", sName
@@ -61,7 +61,6 @@ class PaintWidget(QWidget):
 
                         shapeObj = BaseShape.Rect()
                         shapeObj.setStart(copy.deepcopy(curPoint))
-                        curPoint += QPoint(250, 0)
                         shapeObj.m_sLayerName = layer.GetName()
                         shapeObj.GetLabelMaxWidth(QPainter(self))
 
@@ -70,55 +69,97 @@ class PaintWidget(QWidget):
                         break
         
         #BFS遍历m_dLayers,根据层次信息生成坐标
+        curPoint = QPoint(40, 20)
         while not queObj.empty():
             sLayerName = queObj.get()
-            lOutputs = self.m_dLayers[sLayerName].GetOutpus()
-            curShape = self.m_dShape[sLayerName]
-            curPoint = copy.copy(curShape.m_start)
-            curPoint += QPoint(0, 40)
-            for sOutputLayerName in lOutputs:
-                print sLayerName, sOutputLayerName
-                #统一计算，让其居中
-                if sOutputLayerName not in setMark:
-                    #画矩形
-                    painter = QPainter(self)
-                    shapeObj = BaseShape.Rect()
-                    shapeObj.setStart(curPoint)
-                    shapeObj.m_sLayerName = sOutputLayerName
-                    self.m_dShape[sOutputLayerName] = shapeObj
-                    curPoint = QPoint(shapeObj.GetLabelMaxWidth(painter) + 40 + curPoint.x(),
-                            curPoint.y())
-                    #画线条
-                    lineObj = BaseShape.Line()
-                    startPoint = self.m_dShape[sLayerName].getMid()
-                    endPoint =  self.m_dShape[sOutputLayerName].getMid()
-                    startPoint = self.GetRectVLineInterPoint(self.m_dShape[sLayerName], startPoint, endPoint)
-                    endPoint = self.GetRectVLineInterPoint(self.m_dShape[sOutputLayerName], startPoint, endPoint)
+            shapeObj = self.m_dShape[sLayerName]
+            curPoint = self.getRightPoint(curPoint)
+            shapeObj.m_start = curPoint
+            shapeObj.GetLabelMaxWidth(QPainter(self))
 
-                    lineObj.setStart(startPoint)
-                    lineObj.setEnd(endPoint)
-                    lineObj.m_left = sLayerName
-                    lineObj.m_right = sOutputLayerName
+            self.dfs(sLayerName, setMark)
+        self.update()
+        return;
+    
+    def dfsHeight(self, sLayer_name, set_mark):
+        sLayerName = sLayer_name
+        setMark = set_mark
+        lOutputs = self.m_dLayers[sLayerName].GetOutpus()
+        curShape = self.m_dShape[sLayerName]
+        curPoint = copy.copy(curShape.m_start)
+        for sOutputLayerName in lOutputs:
+            if sOutputLayerName not in setMark:
+                shapeObj = self.m_dShape[sOutputLayerName]
+                shapeObj.m_start = QPoint(shapeObj.m_start.x(), curPoint.y() + 40)
+                shapeObj.GetLabelMaxWidth(QPainter(self))
+                setMark.add(sOutputLayerName)
+                self.dfsHeight(sOutputLayerName, setMark)
+        
+        
+    def dfs(self, sLayer_name, set_mark):
+        """
+            @DFS 可以避免图元重叠
+        """
+        sLayerName = sLayer_name
+        setMark = set_mark
+        lOutputs = self.m_dLayers[sLayerName].GetOutpus()
+        curShape = self.m_dShape[sLayerName]
+        curPoint = copy.copy(curShape.m_start)
+        #向下移动40个像素
+        curPoint += QPoint(0, 40)
 
-                    self.m_dShape[sLayerName + sOutputLayerName] = lineObj
+        for sOutputLayerName in lOutputs:
+            print sLayerName, sOutputLayerName
+            #统一计算，让其居中
+            if sOutputLayerName not in setMark:
+                #画矩形
+                painter = QPainter(self)
+                shapeObj = BaseShape.Rect()
+                curPoint = self.getRightPoint(curPoint)
+                shapeObj.setStart(curPoint)
+                #填写字符
+                shapeObj.m_sLayerName = sOutputLayerName
+                #根据字符算出宽度
+                shapeObj.GetLabelMaxWidth(painter)
+                self.m_dShape[sOutputLayerName] = shapeObj
 
-                    queObj.put(sOutputLayerName)
-                    setMark.add(sOutputLayerName)
-                else:
-                    #画线条
-                    lineObj = BaseShape.Line()
-                    startPoint = self.m_dShape[sLayerName].getMid()
-                    endPoint =  self.m_dShape[sOutputLayerName].getMid()
-                    startPoint = self.GetRectVLineInterPoint(self.m_dShape[sLayerName], startPoint, endPoint)
-                    endPoint = self.GetRectVLineInterPoint(self.m_dShape[sOutputLayerName], startPoint, endPoint)
+                setMark.add(sOutputLayerName)
 
-                    lineObj.setStart(startPoint)
-                    lineObj.setEnd(endPoint)
-                    lineObj.m_left = sLayerName
-                    lineObj.m_right = sOutputLayerName
+                self.dfs(sOutputLayerName, setMark)
+                
+            #画线条
+            lineObj = BaseShape.Line()
+            endShapeObj = self.m_dShape[sOutputLayerName]
+            startShapeObj = self.m_dShape[sLayerName]
+            if endShapeObj.m_start.y() <= startShapeObj.m_start.y():
+                endShapeObj.m_start = QPoint(endShapeObj.m_start.x(), startShapeObj.m_start.y() + 40)
+                endShapeObj.GetLabelMaxWidth(QPainter(self))
+                self.dfsHeight(sOutputLayerName, set([sOutputLayerName]))
+            
+            startPoint = self.m_dShape[sLayerName].getMid()
+            endPoint =  self.m_dShape[sOutputLayerName].getMid()
+            startPoint = self.getRectVLineInterPoint(self.m_dShape[sLayerName], startPoint, endPoint)
+            endPoint = self.getRectVLineInterPoint(self.m_dShape[sOutputLayerName], startPoint, endPoint)
 
-                    self.m_dShape[sLayerName + sOutputLayerName] = lineObj
-                    
+            lineObj.setStart(startPoint)
+            lineObj.setEnd(endPoint)
+            lineObj.m_left = sLayerName
+            lineObj.m_right = sOutputLayerName
+
+            self.m_dShape[sLayerName + sOutputLayerName] = lineObj
+
+    def getRightPoint(self, pointObj):
+        """
+            @返回当前行最靠右的点
+        """
+        fMaxX = pointObj.x()
+        painter = QPainter(self)
+        for (sName, shapeObj) in self.m_dShape.items():
+            if shapeObj.m_start.y() >= pointObj.y() and shapeObj.isRect():
+                fCurX = shapeObj.m_start.x() + shapeObj.GetLabelMaxWidth(painter) + 40
+                if fCurX >= fMaxX:
+                    fMaxX = fCurX
+        return QPoint(fMaxX, pointObj.y())
 
     def paintEvent(self, event):
         """
@@ -130,23 +171,31 @@ class PaintWidget(QWidget):
 
         for (sName, shape) in self.m_dShape.items():
             if shape.isLine():
+                #重新调整坐标
+                leftLayerName = shape.m_left
+                rightLayerName = shape.m_right
+                if self.m_dShape.has_key(leftLayerName) and self.m_dShape.has_key(rightLayerName):
+                    leftShapeObj = self.m_dShape[leftLayerName]
+                    rightShapeObj = self.m_dShape[rightLayerName]
+
+                    startPoint = leftShapeObj.getMid()
+                    endPoint =  rightShapeObj.getMid()
+                    startPoint = self.getRectVLineInterPoint(leftShapeObj, startPoint, endPoint)
+                    endPoint = self.getRectVLineInterPoint(rightShapeObj, startPoint, endPoint)
+                    shape.m_start = startPoint
+                    shape.m_end = endPoint
+
                 shape.paint(painter)
         for (sName, shape) in self.m_dShape.items():
             if shape.isRect():
                 shape.paint(painter)
-        #if self.m_shape != None:
-        #    self.m_shape.paint(painter)
-        #AnimationFactory.AnimationSingleton().Update()
 
-    def Update(self):
-        """
-            @每50ms更新一次
-        """
-        self.update()
-        QTimer.singleShot(50, self.Update)
-
-    def AfterAction(self):
-        print 'after action'
+    #def timerUpdate(self):
+    #    """
+    #        @每50ms更新一次
+    #    """
+    #    self.update()
+    #    QTimer.singleShot(500, self.timerUpdate)
 
     def mouseDoubleClickEvent(self, event):
         """
@@ -158,6 +207,7 @@ class PaintWidget(QWidget):
         self.PressChooseShape(event)
         #触发新建连接的逻辑
         if self.m_sChooseShapeName != None and self.m_sChooseShapeName != "":
+            History.push(self.m_dLayers)
             shapeObj = self.m_dShape[self.m_sChooseShapeName]
             lineObj = BaseShape.Line()
             lineObj.setStart(event.pos())
@@ -168,19 +218,32 @@ class PaintWidget(QWidget):
             self.m_dShape[sName] = lineObj
             self.m_sChooseShapeName = sName
         #触发新建层的逻辑
-        else:
-            print "not imp"
+        else: 
+            editor = Editor.CreateLayerEditor(self.createLayerCallback)
+            editor.exec_()
 
-        #鼠标双击操作，弹出属性框编辑
-        # if self.m_chooseShape != None:
-        #     if self.m_chooseShape.isRect() == True:
-        #         editor = Editor.RectEditor(self.m_chooseShape)
-        #         editor.exec_()
-        #         print 'Double click ',self.m_chooseShape.GetStateDescribe()
-        #     elif self.m_chooseShape.isLine() == True:
-        #         editor = Editor.LineEditor(self.m_chooseShape)
-        #         editor.exec_()
-        #         print 'Double click ',self.m_chooseShape.GetStateDescribe()
+    def createLayerCallback(self, sLayerTypeName):
+        """
+            @ 创建新的层, 窗口关闭回调
+            @ sLayerTypeName 层的类型名
+        """
+        History.push(self.m_dLayers)
+        try: 
+            self.createLayerCallback.__func__.nCounter += 1
+        except AttributeError: 
+            self.createLayerCallback.__func__.nCounter = 1
+        
+        sLayerName = sLayerTypeName + "_" + str(self.createLayerCallback.__func__.nCounter)
+        while self.m_dLayers.has_key(sLayerName) == True:
+            self.createLayerCallback.__func__.nCounter += 1
+            sLayerName = sLayerTypeName + "_" + str(self.createLayerCallback.__func__.nCounter)
+        
+        layerObj = CfgInstance.getLayerCfg(sLayerTypeName)
+        layerObj.m_dKeys["name"] = sLayerName
+        self.m_dLayers[sLayerName] = layerObj
+
+        self.transLayersToShape()
+        return
 
     def PressChooseShape(self, event):
         """
@@ -227,14 +290,15 @@ class PaintWidget(QWidget):
             shapeObj = self.m_dShape[self.m_sChooseShapeName]
             if shapeObj.isLine() == True:
                 if shapeObj.getCorner(event.pos()) != -1:
+                    History.push(self.m_dLayers)
                     #启动编辑对m_dLayer的输入输出产生影响
-                    self.RemoveLine( self.m_sChooseShapeName )
+                    self.removeLine( self.m_sChooseShapeName )
                     return
 
         self.PressChooseShape(event)
         return;
 
-    def MoveReShape(self, event):
+    def moveReshape(self, event):
         if self.m_sChooseShapeName == "":
             return
 
@@ -255,43 +319,42 @@ class PaintWidget(QWidget):
         if self.m_sChooseShapeName != None and self.m_sChooseShapeName != "":
             shapeObj = self.m_dShape[self.m_sChooseShapeName]
             if shapeObj.hasCorner() != -1:
-                self.MoveReShape(event)
+                self.moveReshape(event)
                 return
 
     def keyPressEvent(self, event):
         """
-            @键盘回调函数
+            @ 键盘回调函数
         """
         #删除矩形或者线条
-        if event.key() == Qt.Key_Delete:
-            if self.m_chooseShape !=None:
-                self.m_chooseShape.setColor(False)
+        if event.key() == Qt.Key_Delete or event.key() == 16777219:
+            if self.m_sChooseShapeName != None and self.m_sChooseShapeName != "":
                 print 'key delete'
-                History.Push(self.m_lShape)
-                if self.m_chooseShape.isRect() or self.m_chooseShape.isDiamond():
-                    self.RemoveRect(self.m_chooseShape.m_nId)
-                elif self.m_chooseShape.isLine():
-                    self.RemoveLine(self.m_chooseShape.m_nId)
-            self.m_chooseShape = None
+                History.push(self.m_dLayers)
+                shapeObj = self.m_dShape[self.m_sChooseShapeName]
+                shapeObj.setColor(False)
+                if shapeObj.isRect():
+                    self.removeRect(self.m_sChooseShapeName)
+                    del self.m_dLayers[self.m_sChooseShapeName]
+                elif shapeObj.isLine():
+                    self.removeLine(self.m_sChooseShapeName)
+                self.transLayersToShape()
+            self.m_sChooseShapeName = None
             self.update()
         #ctrl + z 回退错误修改
         elif event.modifiers() == (Qt.ControlModifier) and event.key() == Qt.Key_Z:
-            self.m_lShape = History.Pop(self.m_lShape)
+            self.m_sChooseShapeName = None
+            self.m_dLayers = History.back(self.m_dLayers)
+            self.transLayersToShape()
             self.update()
-            if self.m_chooseShape == True:
-                self.m_chooseShape.setColor(False)
-                self.m_chooseShape = None
-                self.m_shape = None
-                self.m_perm = True
-            if self.m_curAction != None:
-                self.m_curAction.setChecked(False)
-            self.m_curAction = None
-            self.m_curShapeCode = -1
         #ctrl + r 前进
         elif event.modifiers() == (Qt.ControlModifier) and event.key() == Qt.Key_R:
-            assert False
+            self.m_sChooseShapeName = None
+            self.m_dLayers = History.forward(self.m_dLayers)
+            self.transLayersToShape()
+            self.update()
 
-    def RemoveLine(self, sName):
+    def removeLine(self, sName):
         """
             @ 移除一个连接 
             @ 清理所有和这个连接有关的层的inputs和outputs
@@ -311,7 +374,7 @@ class PaintWidget(QWidget):
         if self.m_dLayers.has_key(sRightLayerName):
             self.m_dLayers[sRightLayerName].delInput(sLeftLayerName)
 
-    def AddLine(self, sName):
+    def addLine(self, sName):
         """
             @ 添加一个链接
             @ 删除对应的层的inputs和outputs
@@ -332,30 +395,17 @@ class PaintWidget(QWidget):
         print sRightLayerName, "append inputs", sLeftLayerName
         
 
-    def RemoveRect(self, nId):
-        for i in range(len(self.m_lShape)):
-            if self.m_lShape[i].m_nId == nId:
-                del self.m_lShape[i]
-                break
-        self.RemoveErrorLine(nId)
-
-    def RemoveErrorLine(self, nId):
-        while True:
-            flag = self.CheckErrorLine(nId);
-            if flag == -1:
-                break;
-            else:
-                self.RemoveLine(self.m_lShape[flag].m_nId)
-
-    def CheckErrorLine(self, nId):
-        for i in range(len(self.m_lShape)):
-            if self.m_lShape[i].m_left == nId or self.m_lShape[i].m_right == nId:
-                return i
-        return -1
-
-    def ReleaseReshape(self, event):
+    def removeRect(self, sLayer_name):
         """
-            @重新編輯圖元結束
+            @删除一个层，需要将与这个层相关的所有输入和输出都删除
+        """
+        for (sName, layerObj) in self.m_dLayers.items():
+            layerObj.delInput(sLayer_name)
+            layerObj.delOutput(sLayer_name)
+
+    def releaseReshape(self, event):
+        """
+            @ 重新編輯圖元結束
         """
         if self.m_sChooseShapeName != None and self.m_sChooseShapeName != "" and self.m_dShape[self.m_sChooseShapeName].isLine() == True:
             shapeObj = self.m_dShape[self.m_sChooseShapeName]
@@ -368,18 +418,16 @@ class PaintWidget(QWidget):
                 print "修改线段非法"
                 del self.m_dShape[self.m_sChooseShapeName]
                 self.m_sChooseShapeName = None
-                self.TransLayersToShape()
+                self.transLayersToShape()
             else:
                 print "修改线段合法"
-                self.AddLine(self.m_sChooseShapeName)
+                self.addLine(self.m_sChooseShapeName)
                 shapeObj = self.m_dShape[self.m_sChooseShapeName]
                 del self.m_dShape[self.m_sChooseShapeName]
                 self.m_sChooseShapeName = None
                 sName = shapeObj.m_left + shapeObj.m_right
                 self.m_dShape[sName] = shapeObj
-                self.TransLayersToShape()
-
-        self.Update()
+                self.transLayersToShape()
 
     def mouseReleaseEvent(self, event):
         """
@@ -391,7 +439,7 @@ class PaintWidget(QWidget):
                 print "without this key", self.m_sChooseShapeName
                 assert False, self.m_sChooseShapeName
             if self.m_dShape[self.m_sChooseShapeName].isLine() and self.m_dShape[self.m_sChooseShapeName].m_curConner != -1:
-                self.ReleaseReshape(event)
+                self.releaseReshape(event)
     
     # 线段的起点和终点必须在矩形的内部
     def checkLineLegal(self):
@@ -429,11 +477,11 @@ class PaintWidget(QWidget):
             if flag1 != flag2:
                 start = QPoint()
                 if self.m_dShape[flag1].isRect():
-                    start = self.GetRectVLineInterPoint(self.m_dShape[flag1], curLineObj.m_start, curLineObj.m_end)
+                    start = self.getRectVLineInterPoint(self.m_dShape[flag1], curLineObj.m_start, curLineObj.m_end)
 
                 end = QPoint()
                 if self.m_dShape[flag2].isRect():
-                    end = self.GetRectVLineInterPoint(self.m_dShape[flag2], curLineObj.m_start, curLineObj.m_end)
+                    end = self.getRectVLineInterPoint(self.m_dShape[flag2], curLineObj.m_start, curLineObj.m_end)
 
                 if start == None:
                     start = copy.deepcopy(curLineObj.m_start)
@@ -467,7 +515,7 @@ class PaintWidget(QWidget):
         else:
             return False
 
-    def GetRectVLineInterPoint(self, rect, p1, p2):
+    def getRectVLineInterPoint(self, rect, p1, p2):
         a1 = QPoint(rect.m_start.x(), rect.m_end.y())
         a2 = QPoint(rect.m_end.x(), rect.m_start.y())
         a3 = rect.m_start

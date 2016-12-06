@@ -5,7 +5,6 @@ from PyQt4.QtGui import *
 import math
 import Geometry
 import copy
-import JsonConfigure
 
 class BaseShape(object):
     s_Line = 0
@@ -14,8 +13,6 @@ class BaseShape(object):
     s_DottedLine = 3
     s_Comment = 4
     s_curId = 0
-    s_dState = JsonConfigure.g_dState
-    s_dCondition = JsonConfigure.g_dCondition
 
     def __init__(self):
         self.m_nId = self.s_curId
