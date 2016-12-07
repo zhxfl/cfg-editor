@@ -5,28 +5,7 @@ from PyQt4.QtCore import *
 from PyQt4.QtGui import *
 import BaseShape
 import CfgInstance
-
-class RectEditor(QDialog):
-    def __init__(self, ShapeObj, parent=None):
-        self.m_ShapeObj = ShapeObj
-        QWidget.__init__(self, parent)
-        self.setWindowTitle(u'矩形状态编辑框')
-
-        grid = QGridLayout()
-
-        labelObj = QLabel(u'状态名')
-        grid.addWidget(labelObj, 1, 1)
-
-        self.m_Combo = QComboBox()
-        for (key, value) in BaseShape.BaseShape.s_dState.items():
-            self.m_Combo.addItem(value)
-        self.m_Combo.setCurrentIndex(self.m_ShapeObj.GetStateId())
-        grid.addWidget(self.m_Combo, 1, 2)
-        self.setLayout(grid)
-
-    def closeEvent(self, event):
-        self.m_ShapeObj.SetStateId(self.m_Combo.currentIndex())
-        print u'矩形状态编辑框关闭'
+import json
 
 class CreateLayerEditor(QDialog):
     """
@@ -63,21 +42,72 @@ class LayerConfigEditor(QWidget):
 
     def initUI(self):
         grid = QGridLayout()
+        self.m_notEditorCheckbox = QCheckBox(u"不需要编辑")
+        self.m_weightCheckbox = QCheckBox(u"权重")
+        self.m_inputCheckbox = QCheckBox(u"输入数据规格")
+        self.m_allCheckbox = QCheckBox(u"全部")
+
+        self.m_inputCheckbox.setChecked(True)
+        self.m_weightCheckbox.setChecked(True)
+
+        #grid.setSpacing()
+        #设置布局器比例
+        grid.setRowStretch(0, 3)
+        grid.setRowStretch(1, 10)
+
+        grid.addWidget(self.m_notEditorCheckbox, 0, 0)
+        grid.addWidget(self.m_weightCheckbox, 0, 1)
+        grid.addWidget(self.m_inputCheckbox, 0, 2)
+        grid.addWidget(self.m_allCheckbox, 0, 3)
+
         self.setLayout(grid)
 
     def ShowLayerConfig(self, layer):
         #inputs
         #outputs
         table = QTableWidget();
+        self.m_table = table
+        self.m_layer = layer
         table.setColumnCount(2);
         table.setRowCount(len(layer.m_dKeys));
         
         grid = self.layout()
-        grid.addWidget(table, 0, 0)
+        grid.addWidget(table, 1, 0, 1, 4)
+        keyItems = layer.m_dKeys.items()
+        keyItems.sort()
         nIdx = 0
-        for (sName, value) in layer.m_dKeys.items() :
-            table.setItem(nIdx, 0, QTableWidgetItem(sName))
-            table.setItem(nIdx, 1, QTableWidgetItem(str(value)))
-            #第一列不支持编辑
-            table.item(nIdx, 0).setFlags(table.item(nIdx, 0).flags() & (~ Qt.ItemIsEditable))
-            nIdx = nIdx +  1
+        for (sName, value) in keyItems:
+            if self.checkKey(sName):
+                table.setItem(nIdx, 0, QTableWidgetItem(sName))
+                table.setItem(nIdx, 1, QTableWidgetItem(json.dumps(value)))
+                #第一列不支持编辑
+                table.item(nIdx, 0).setFlags(table.item(nIdx, 0).flags() & (~ Qt.ItemIsEditable))
+                nIdx = nIdx +  1
+        table.itemChanged.connect(self.itemChangeCallBack)
+
+    def checkKey(self, sName):
+        if self.m_allCheckbox.isChecked():
+            return True
+        else:
+            if self.m_notEditorCheckbox.isChecked() == True:
+                notEditorSet = set([ "inputs", "outputs", "name", "type"])
+                if sName in notEditorSet:
+                    return True
+            if self.m_weightCheckbox.isChecked() == True:
+                weightSet= set(["inputMaps","outputMaps", "filterWidth", "filterHeight", "paddingHeight", "paddingWidth", "strideWidth", "strideHeight"]) | \
+                set(["winWidth", "winHeight", "strideHeight", "strideWidth", "paddingHeight", "paddingWidth"]) | set(["outDim"]) 
+                if sName in weightSet:
+                    return True
+            if self.m_inputCheckbox.isChecked() == True:
+                inputSet = set(["height", "width", "inDim", "inputMaps", "outputMaps"])
+                if sName in inputSet:
+                    return True
+        return False 
+
+
+
+    def itemChangeCallBack(self, item):
+        sKey = str(self.m_table.item(item.row(),0).text())
+        print item.column(), item.row(), sKey, str(item.text())
+        #列表的解析TODO
+        self.m_layer.m_dKeys[sKey] = json.loads(str(item.text()))

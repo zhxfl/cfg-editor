@@ -1,6 +1,17 @@
 import copy
 import Config
 
+g_sHead = "\
+deviceId = 0:1:2:3\n\
+keepHistory  = true\n\
+epoch = 200\n\
+scalars = 1.0\n\
+logPeriod = 20000\n\
+modelPeriod = 50000\n\
+initMean = 0\n\
+initStdv = 0.01\n\
+dataCfgFile = ./train_input/all_cnn_cifar_100/image_train_data.conf\n\
+jobType = train\n\n"
 
 g_sImageConv = "image_conv"
 g_sImagePool = "image_pool"

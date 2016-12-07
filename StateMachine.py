@@ -26,12 +26,12 @@ class MainWindow(QMainWindow):
 
         #菜单栏
         FileMemu = self.menuBar().addMenu(u"菜单")
-        SaveAction = QAction(u"保存", FileMemu)
-        SaveAction.triggered.connect(self.Save)
-        ReadAction = QAction(u"读取", FileMemu)
-        ReadAction.triggered.connect(self.Read)
-        FileMemu.addAction(SaveAction)
-        FileMemu.addAction(ReadAction)
+        saveAction = QAction(u"保存", FileMemu)
+        saveAction.triggered.connect(self.save)
+        readAction = QAction(u"读取", FileMemu)
+        readAction.triggered.connect(self.read)
+        FileMemu.addAction(saveAction)
+        FileMemu.addAction(readAction)
 
         #画布
         #TODO 画布大小自动调整
@@ -58,44 +58,48 @@ class MainWindow(QMainWindow):
         editorTooBar = QToolBar()
         self.addToolBar(Qt.TopToolBarArea, editorTooBar)
 
-        #TODO  
-        self.Read()
+        self.read()
 
-    def Save(self):
+    def save(self):
         """
             @保存配置表
         """
         fileDialog = QFileDialog(self)
         fileDialog.setWindowTitle(u'保存状态图')
         fileDialog.setDirectory('.')
-        fileDialog.setFilter("Image Files(*.json)")
+        fileDialog.setFilter("Image Files(*.cfg)")
         path = ''
         if fileDialog.exec_() == QDialog.Accepted:
             path = fileDialog.selectedFiles()[0]
             QMessageBox.information(None, u"路径", u"保存目录为：" + path)
-            jsonFile = {}
-            for shape in self.m_PaintWidget.m_lShape:
-                jsonFile[shape.m_nId] = {}
-                jsonFile[shape.m_nId] = shape.ToJson()
-            jsonFile['s_curId'] = BaseShape.BaseShape.s_curId
-            print json.dumps(jsonFile)
-            with open(path, 'w') as outfile:
-                json.dump(jsonFile, outfile)
+            sConfig = CfgInstance.g_sHead
+            for (sName, shapeObj) in self.m_PaintWidget.m_dLayers.items():
+                sConfig += "[Layer]\n";
+                for(sKey, value) in shapeObj.m_dKeys.items():
+                    if sKey == "outputs":
+                        continue
+                    sConfig += sKey + "="
+                    if isinstance(value, list):
+                        if len(value) >= 1:
+                            sConfig += str(value[0])
+                            nIdx = 1
+                            while nIdx < len(value):
+                                sConfig += "," + str(value[nIdx])
+                                nIdx = nIdx + 1
+                        sConfig += "\n";
+                    else:
+                        sConfig += str(value) + "\n"
+
+                sConfig +="[end]\n\n";
+            file = open(path, "w")
+            file.write(sConfig)
+            file.close()
         else:
             QMessageBox.information(None, u"路径", u"你没有选中任何文件")
         print u'保存状态图'
 
-    def BuildNet(self):
-        for CommentObj in self.m_PaintWidget.m_lShape:
-            if CommentObj.isComment():
-                for LineObj in self.m_PaintWidget.m_lShape:
-                    if LineObj.isLine():
-                        if LineObj.m_nCommentId == CommentObj.m_nId:
-                            CommentObj.m_LineObj = LineObj
-        print 'build net'
-
     #读取配置表，抽取配置表信息，建立树形结构
-    def Read(self):
+    def read(self):
         fileDialog = QFileDialog(self)
         fileDialog.setWindowTitle(u'读取状态图')
         fileDialog.setDirectory('.')

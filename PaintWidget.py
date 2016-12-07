@@ -80,6 +80,15 @@ class PaintWidget(QWidget):
             self.dfs(sLayerName, setMark)
         self.update()
         return;
+
+    def changeLayerName(self, sFrom_name, sTo_name):
+        for (sName, layerObj) in self.m_dLayers.items():
+            if sFrom_name in layerObj.GetInputs():
+                layerObj.delInput(sFrom_name)
+                layerObj.AppendInput(sTo_name)
+            if sFrom_name in layerObj.GetOutpus():
+                layerObj.delOutput(sFrom_name)
+                layerObj.AppendOutput(sTo_name)
     
     def dfsHeight(self, sLayer_name, set_mark):
         sLayerName = sLayer_name
@@ -94,7 +103,6 @@ class PaintWidget(QWidget):
                 shapeObj.GetLabelMaxWidth(QPainter(self))
                 setMark.add(sOutputLayerName)
                 self.dfsHeight(sOutputLayerName, setMark)
-        
         
     def dfs(self, sLayer_name, set_mark):
         """
@@ -353,6 +361,14 @@ class PaintWidget(QWidget):
             self.m_dLayers = History.forward(self.m_dLayers)
             self.transLayersToShape()
             self.update()
+        #F 刷新
+        elif event.key() == Qt.Key_F:
+            for (sName, layerObj) in self.m_dLayers.items():
+                if sName != layerObj.GetName():
+                    self.changeLayerName(sName, layerObj.GetName())
+                    del self.m_dLayers[sName]
+                    self.m_dLayers[layerObj.GetName()] = layerObj
+            self.transLayersToShape()
 
     def removeLine(self, sName):
         """
@@ -461,8 +477,6 @@ class PaintWidget(QWidget):
         #不能画环
         if flag1 == flag2:
             return False
-
-        print "editor", flag1, flag2
 
         if flag1 != "" and flag2 != "":
             #重複的邊
